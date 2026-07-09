@@ -19,6 +19,9 @@ class Settings(object):
             "operation_delay_methods": ["click", "swipe"],
             "fallback_to_blank_screenshot": False,
             "max_depth": 50,
+            "selector_backend": "jsonrpc",
+            "spxposed_dump_url": "http://127.0.0.1:9726/dump",
+            "spxposed_dump_timeout": 10.0,
         }
 
         self._deprecated_props = {
@@ -33,6 +36,9 @@ class Settings(object):
             "post_delay": (float, int),
             "xpath_debug": bool,
             "fallback_to_blank_screenshot": bool,
+            "selector_backend": str,
+            "spxposed_dump_url": str,
+            "spxposed_dump_timeout": (float, int),
         }
         for k, v in self._defaults.items():
             if k not in self._prop_types:

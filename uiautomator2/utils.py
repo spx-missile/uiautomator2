@@ -124,6 +124,8 @@ class Exists(object):
 
     def __nonzero__(self):
         """Magic method for bool(self) python2 """
+        if hasattr(self.uiobject, "_use_spxposed") and self.uiobject._use_spxposed():
+            return self.uiobject.count > 0
         return self.uiobject.jsonrpc.exist(self.uiobject.selector)
 
     def __bool__(self):
@@ -291,4 +293,3 @@ def image_convert(im: Image.Image, format: str):
             warnings.warn("missing lib: cv2 or numpy")
             raise
     raise ValueError("Unsupported format:", format)
-

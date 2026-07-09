@@ -117,7 +117,10 @@ class _Device(_BaseClient):
         try:
             if max_depth is None:
                 max_depth = self.settings['max_depth']
-            content = self._do_dump_hierarchy(compressed, max_depth, root_in_active)
+            if self.settings["selector_backend"] == "spxposed":
+                content = self._spxposed_backend().dump_hierarchy()
+            else:
+                content = self._do_dump_hierarchy(compressed, max_depth, root_in_active)
         except HierarchyEmptyError: # pragma: no cover
             logger.warning("dump empty, return empty xml")
             content = '<?xml version=\'1.0\' encoding=\'UTF-8\' standalone=\'yes\' ?>\r\n<hierarchy rotation="0" />'
@@ -127,6 +130,14 @@ class _Device(_BaseClient):
             content = etree.tostring(root, pretty_print=True, encoding='UTF-8', xml_declaration=True)
             content = content.decode("utf-8")
         return content
+
+    def _spxposed_backend(self):
+        backend = getattr(self, "_cached_spxposed_backend", None)
+        if backend is None:
+            from uiautomator2.spxposed import SpxposedSelectorBackend
+            backend = SpxposedSelectorBackend(self)
+            self._cached_spxposed_backend = backend
+        return backend
 
     @retry(HierarchyEmptyError, tries=3, delay=1)
     def _do_dump_hierarchy(self, compressed=False, max_depth=None, root_in_active: Optional[bool] = None) -> str:

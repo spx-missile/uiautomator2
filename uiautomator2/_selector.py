@@ -113,6 +113,12 @@ class UiObject(object):
         self.selector = selector
         self.jsonrpc = session.jsonrpc
 
+    def _use_spxposed(self) -> bool:
+        return self.session.settings["selector_backend"] == "spxposed"
+
+    def _spxposed(self):
+        return self.session._spxposed_backend()
+
     @property
     def wait_timeout(self):
         return self.session.wait_timeout
@@ -125,10 +131,14 @@ class UiObject(object):
     @property
     def info(self):
         '''ui object info.'''
+        if self._use_spxposed():
+            return self._spxposed().info(self.selector)
         return self.jsonrpc.objInfo(self.selector)
 
     def info_list(self) -> List[Dict]:
         '''all matched ui objects info list.'''
+        if self._use_spxposed():
+            return self._spxposed().info_list(self.selector)
         return self.jsonrpc.objInfoOfAllInstances(self.selector)
 
     def screenshot(self, display_id: Optional[int] = None) -> Image.Image:
@@ -227,6 +237,16 @@ class UiObject(object):
         self.must_wait(timeout=timeout)
 
         steps = int(duration * 200)
+        if self._use_spxposed():
+            sx, sy = self.center()
+            if len(args) >= 2 or "x" in kwargs or "y" in kwargs:
+                x = args[0] if args else kwargs.get("x")
+                y = args[1] if len(args) > 1 else kwargs.get("y")
+                x, y = self.session.pos_rel2abs(x, y)
+            else:
+                target = UiObject(self.session, Selector(**kwargs))
+                x, y = target.center()
+            return self.session.swipe(sx, sy, x, y, steps=steps)
         if len(args) >= 2 or "x" in kwargs or "y" in kwargs:
 
             def drag2xy(x, y):
@@ -287,9 +307,21 @@ class UiObject(object):
         return self.jsonrpc.gesture(self.selector, s1, s2, e1, e2, steps)
 
     def pinch_in(self, percent=100, steps=50):
+        if self._use_spxposed():
+            lx, ly, rx, ry = self.bounds()
+            cx, cy = (lx + rx) // 2, (ly + ry) // 2
+            dx = max(1, int((rx - lx) * 0.25))
+            self.session.swipe(cx - dx, cy, cx, cy, steps=steps)
+            return self.session.swipe(cx + dx, cy, cx, cy, steps=steps)
         return self.jsonrpc.pinchIn(self.selector, percent, steps)
 
     def pinch_out(self, percent=100, steps=50):
+        if self._use_spxposed():
+            lx, ly, rx, ry = self.bounds()
+            cx, cy = (lx + rx) // 2, (ly + ry) // 2
+            dx = max(1, int((rx - lx) * 0.25))
+            self.session.swipe(cx, cy, cx - dx, cy, steps=steps)
+            return self.session.swipe(cx, cy, cx + dx, cy, steps=steps)
         return self.jsonrpc.pinchOut(self.selector, percent, steps)
 
     def wait(self, exists=True, timeout=None):
@@ -305,6 +337,8 @@ class UiObject(object):
         """
         if timeout is None:
             timeout = self.wait_timeout
+        if self._use_spxposed():
+            return self._spxposed().wait(self.selector, exists, timeout)
         http_wait = timeout + 10
         if exists:
             try:
@@ -347,6 +381,12 @@ class UiObject(object):
 
     def set_text(self, text, timeout=None):
         self.must_wait(timeout=timeout)
+        if self._use_spxposed():
+            self.click(timeout=timeout)
+            if not text:
+                return self.session.clear_text()
+            self.session.clear_text()
+            return self.session.send_keys(text)
         if not text:
             return self.jsonrpc.clearTextField(self.selector)
         else:
@@ -355,6 +395,8 @@ class UiObject(object):
     def get_text(self, timeout=None):
         """ get text from field """
         self.must_wait(timeout=timeout)
+        if self._use_spxposed():
+            return self._spxposed().get_text(self.selector)
         return self.jsonrpc.getText(self.selector)
 
     def clear_text(self, timeout=None):
@@ -370,6 +412,10 @@ class UiObject(object):
     child_selector, from_parent = child, sibling
 
     def child_by_text(self, txt, **kwargs):
+        if self._use_spxposed():
+            kwargs.pop("allow_scroll_search", None)
+            kwargs["text"] = txt
+            return self.child(**kwargs)
         if "allow_scroll_search" in kwargs:
             allow_scroll_search = kwargs.pop("allow_scroll_search")
             name = self.jsonrpc.childByText(self.selector, Selector(**kwargs),
@@ -381,6 +427,10 @@ class UiObject(object):
 
     def child_by_description(self, txt, **kwargs):
         # need test
+        if self._use_spxposed():
+            kwargs.pop("allow_scroll_search", None)
+            kwargs["description"] = txt
+            return self.child(**kwargs)
         if "allow_scroll_search" in kwargs:
             allow_scroll_search = kwargs.pop("allow_scroll_search")
             name = self.jsonrpc.childByDescription(self.selector,
@@ -393,6 +443,8 @@ class UiObject(object):
 
     def child_by_instance(self, inst, **kwargs):
         # need test
+        if self._use_spxposed():
+            return self.child(**kwargs)[inst]
         return UiObject(
             self.session,
             self.jsonrpc.childByInstance(self.selector, Selector(**kwargs),
@@ -418,7 +470,7 @@ class UiObject(object):
         if instance < 0:
             selector['instance'] = 0
             del selector['instance']
-            count = self.jsonrpc.count(selector)
+            count = self._spxposed().count(selector) if self._use_spxposed() else self.jsonrpc.count(selector)
             assert instance + count >= 0
             instance += count
 
@@ -427,6 +479,8 @@ class UiObject(object):
 
     @property
     def count(self):
+        if self._use_spxposed():
+            return self._spxposed().count(self.selector)
         return self.jsonrpc.count(self.selector)
 
     def __len__(self):
@@ -499,6 +553,7 @@ class UiObject(object):
         """
         jsonrpc = self.jsonrpc
         selector = self.selector
+        obj = self
 
         class _Fling(object):
             def __init__(self):
@@ -520,6 +575,20 @@ class UiObject(object):
                 raise ValueError("invalid prop %s" % key)
 
             def __call__(self, max_swipes=500, **kwargs):
+                if obj._use_spxposed():
+                    lx, ly, rx, ry = obj.bounds()
+                    cx, cy = (lx + rx) // 2, (ly + ry) // 2
+                    if self._vertical:
+                        if self.action in ("forward", "toEnd"):
+                            return obj.session.swipe(cx, ry - 1, cx, ly, steps=SCROLL_STEPS)
+                        if self.action in ("backward", "toBeginning"):
+                            return obj.session.swipe(cx, ly, cx, ry - 1, steps=SCROLL_STEPS)
+                    else:
+                        if self.action in ("forward", "toEnd"):
+                            return obj.session.swipe(rx - 1, cy, lx, cy, steps=SCROLL_STEPS)
+                        if self.action in ("backward", "toBeginning"):
+                            return obj.session.swipe(lx, cy, rx - 1, cy, steps=SCROLL_STEPS)
+                    return False
                 if self.action == "forward":
                     return jsonrpc.flingForward(selector, self._vertical)
                 elif self.action == "backward":
@@ -542,6 +611,7 @@ class UiObject(object):
         """
         selector = self.selector
         jsonrpc = self.jsonrpc
+        obj = self
 
         class _Scroll(object):
             def __init__(self):
@@ -564,6 +634,30 @@ class UiObject(object):
 
             def __call__(self, steps=SCROLL_STEPS, max_swipes=500, **kwargs):
                 # More steps slows the swipe and prevents contents from being flung too far
+                if obj._use_spxposed():
+                    lx, ly, rx, ry = obj.bounds()
+                    cx, cy = (lx + rx) // 2, (ly + ry) // 2
+                    if self.action == "to" and kwargs:
+                        target = UiObject(obj.session, Selector(**kwargs))
+                        for _ in range(max_swipes):
+                            if target.exists:
+                                return True
+                            if self._vertical:
+                                obj.session.swipe(cx, ry - 1, cx, ly, steps=steps)
+                            else:
+                                obj.session.swipe(rx - 1, cy, lx, cy, steps=steps)
+                        return False
+                    if self._vertical:
+                        if self.action in ("forward", "toEnd"):
+                            return obj.session.swipe(cx, ry - 1, cx, ly, steps=steps)
+                        if self.action in ("backward", "toBeginning"):
+                            return obj.session.swipe(cx, ly, cx, ry - 1, steps=steps)
+                    else:
+                        if self.action in ("forward", "toEnd"):
+                            return obj.session.swipe(rx - 1, cy, lx, cy, steps=steps)
+                        if self.action in ("backward", "toBeginning"):
+                            return obj.session.swipe(lx, cy, rx - 1, cy, steps=steps)
+                    return False
                 if self.action in ["forward", "backward"]:
                     method = jsonrpc.scrollForward if self.action == "forward" else jsonrpc.scrollBackward
                     return method(selector, self._vertical, steps)
