@@ -114,7 +114,7 @@ class UiObject(object):
         self.jsonrpc = session.jsonrpc
 
     def _use_spxposed(self) -> bool:
-        return self.session.settings["selector_backend"] == "spxposed"
+        return self.session._should_use_spxposed()
 
     def _spxposed(self):
         return self.session._spxposed_backend()

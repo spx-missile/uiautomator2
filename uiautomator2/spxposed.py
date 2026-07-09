@@ -33,11 +33,30 @@ class SpxposedSelectorBackend:
     def __init__(self, session):
         self.session = session
 
+    def should_use(self) -> bool:
+        if self.session.settings["selector_backend"] != "spxposed":
+            return False
+        try:
+            package_name = self.session.app_current().get("package")
+        except Exception:
+            return False
+        return package_name == self.session.settings["spxposed_foreground_package"]
+
     def dump_hierarchy(self) -> str:
+        if self.session.settings["spxposed_dump_transport"] == "adb_shell":
+            return self._dump_hierarchy_adb_shell()
         url = self.session.settings["spxposed_dump_url"]
         timeout = self.session.settings["spxposed_dump_timeout"]
         with urlopen(url, timeout=timeout) as response:
             return response.read().decode("utf-8")
+
+    def _dump_hierarchy_adb_shell(self) -> str:
+        url = self.session.settings["spxposed_dump_url"]
+        timeout = self.session.settings["spxposed_dump_timeout"]
+        response = self.session.shell(["curl", "-sS", "--max-time", str(timeout), url], timeout=timeout + 2)
+        if response.exit_code != 0:
+            raise RuntimeError(f"SPXposed dump command failed: {response.output.strip()}")
+        return response.output
 
     def find(self, selector) -> List[SpxposedNode]:
         roots = self._parse(self.dump_hierarchy())

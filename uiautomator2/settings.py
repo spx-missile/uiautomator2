@@ -22,6 +22,8 @@ class Settings(object):
             "selector_backend": "jsonrpc",
             "spxposed_dump_url": "http://127.0.0.1:9726/dump",
             "spxposed_dump_timeout": 10.0,
+            "spxposed_dump_transport": "urlopen",
+            "spxposed_foreground_package": "com.shopee.vn",
         }
 
         self._deprecated_props = {
@@ -39,6 +41,8 @@ class Settings(object):
             "selector_backend": str,
             "spxposed_dump_url": str,
             "spxposed_dump_timeout": (float, int),
+            "spxposed_dump_transport": str,
+            "spxposed_foreground_package": str,
         }
         for k, v in self._defaults.items():
             if k not in self._prop_types:

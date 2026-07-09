@@ -117,7 +117,7 @@ class _Device(_BaseClient):
         try:
             if max_depth is None:
                 max_depth = self.settings['max_depth']
-            if self.settings["selector_backend"] == "spxposed":
+            if self._should_use_spxposed():
                 content = self._spxposed_backend().dump_hierarchy()
             else:
                 content = self._do_dump_hierarchy(compressed, max_depth, root_in_active)
@@ -138,6 +138,9 @@ class _Device(_BaseClient):
             backend = SpxposedSelectorBackend(self)
             self._cached_spxposed_backend = backend
         return backend
+
+    def _should_use_spxposed(self) -> bool:
+        return self._spxposed_backend().should_use()
 
     @retry(HierarchyEmptyError, tries=3, delay=1)
     def _do_dump_hierarchy(self, compressed=False, max_depth=None, root_in_active: Optional[bool] = None) -> str:
